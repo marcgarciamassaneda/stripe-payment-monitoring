@@ -14,6 +14,25 @@ Automated pipeline that catches failed Stripe payments in real-time, syncs daily
 
 ---
 
+## Screenshots
+
+**Looker Studio Dashboard**
+![Dashboard](screenshots/dashboard.png)
+
+**Daily Email Report**
+![Email report](screenshots/email-report.png)
+
+**Slack Alerts**
+![Slack alerts](screenshots/slack-alerts.png)
+
+**Workflow 1 — Failure Alerts**
+![Workflow 1](screenshots/workflow1-failure-alerts.png)
+
+**Workflow 2 — Daily Sync**
+![Workflow 2](screenshots/workflow2-daily-sync.png)
+
+---
+
 ## Architecture
 
 ```
