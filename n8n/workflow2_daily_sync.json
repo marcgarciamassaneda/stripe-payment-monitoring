@@ -1,0 +1,439 @@
+{
+  "id": "e1f2a3b4-c1d2-4e3f-c1d2-e1f2a3b4c1d2",
+  "versionId": "f1a2b3c4-d1e2-4f3a-d1e2-f1a2b3c4d1e2",
+  "name": "Stripe: Daily Sync to BigQuery",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "5 0 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0001-0001-0001-b2c3d4e50001",
+      "name": "Daily at 00:05",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-date-from",
+              "name": "date_from",
+              "value": "={{ Math.floor(new Date(new Date().setDate(new Date().getDate() - 1)).setHours(0,0,0,0) / 1000) }}",
+              "type": "number"
+            },
+            {
+              "id": "assign-date-to",
+              "name": "date_to",
+              "value": "={{ Math.floor(new Date().setHours(0,0,0,0) / 1000) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0002-0002-0002-b2c3d4e50002",
+      "name": "Calculate Date Range",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.stripe.com/v1/payment_intents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "created[gte]", "value": "={{ $json.date_from }}" },
+            { "name": "created[lt]",  "value": "={{ $json.date_to }}" },
+            { "name": "limit",        "value": "100" },
+            { "name": "expand[]",     "value": "data.customer" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0003-0003-0003-b2c3d4e50003",
+      "name": "Fetch Payments from Stripe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [920, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_STRIPE_CREDENTIAL_ID",
+          "name": "Stripe API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0003b-003b-003b-b2c3d4e5003b",
+      "name": "Unpack payments array",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "b2c3d4e5-0004-0004-0004-b2c3d4e50004",
+      "name": "Loop Over Payments",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t-01",
+              "name": "payment_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "t-02",
+              "name": "customer_id",
+              "value": "={{ $json.customer?.id ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "t-03",
+              "name": "customer_name",
+              "value": "={{ $json.customer?.name ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "t-04",
+              "name": "customer_email",
+              "value": "={{ $json.customer?.email ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "t-05",
+              "name": "amount",
+              "value": "={{ $json.amount / 100 }}",
+              "type": "number"
+            },
+            {
+              "id": "t-06",
+              "name": "currency",
+              "value": "={{ $json.currency.toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "t-07",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "t-08",
+              "name": "failure_reason",
+              "value": "={{ $json.last_payment_error?.message ?? null }}",
+              "type": "string"
+            },
+            {
+              "id": "t-09",
+              "name": "failure_code",
+              "value": "={{ $json.last_payment_error?.code ?? null }}",
+              "type": "string"
+            },
+            {
+              "id": "t-10",
+              "name": "created_at",
+              "value": "={{ new Date($json.created * 1000).toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "t-11",
+              "name": "synced_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0005-0005-0005-b2c3d4e50005",
+      "name": "Transform Payment",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_GCP_PROJECT_ID",
+          "mode": "id"
+        },
+        "datasetId": {
+          "__rl": true,
+          "value": "stripe_data_2",
+          "mode": "id"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "payments",
+          "mode": "id"
+        },
+        "dataMode": "autoMapInputData",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0006-0006-0006-b2c3d4e50006",
+      "name": "Insert into BigQuery",
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2,
+      "position": [1800, 300],
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "REPLACE_WITH_BIGQUERY_CREDENTIAL_ID",
+          "name": "Google BigQuery"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collapse all items from the loop's done output into one\n// so the stats queries only run once\nreturn [{ json: {} }];"
+      },
+      "id": "b2c3d4e5-00run-00run-run0-b2c3d4e5run0",
+      "name": "Trigger Once",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "projectId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_GCP_PROJECT_ID",
+          "mode": "id"
+        },
+        "sqlQuery": "WITH deduped AS (\n  SELECT *,\n    ROW_NUMBER() OVER (PARTITION BY payment_id ORDER BY synced_at DESC) AS rn\n  FROM `weather-project-geocoding-api.stripe_data_2.payments`\n  WHERE DATE(created_at) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n)\nSELECT\n  COUNT(*) AS total_payments,\n  COUNTIF(status != 'succeeded') AS failed_payments,\n  ROUND(COUNTIF(status != 'succeeded') / COUNT(*) * 100, 1) AS failure_rate_pct,\n  ROUND(SUM(CASE WHEN status != 'succeeded' THEN amount ELSE 0 END), 2) AS revenue_at_risk\nFROM deduped\nWHERE rn = 1",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0008-0008-0008-b2c3d4e50008",
+      "name": "BQ: Get Daily Stats",
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2,
+      "position": [1580, 500],
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "REPLACE_WITH_BIGQUERY_CREDENTIAL_ID",
+          "name": "Google BigQuery"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "projectId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_GCP_PROJECT_ID",
+          "mode": "id"
+        },
+        "sqlQuery": "WITH deduped AS (\n  SELECT *,\n    ROW_NUMBER() OVER (PARTITION BY payment_id ORDER BY synced_at DESC) AS rn\n  FROM `weather-project-geocoding-api.stripe_data_2.payments`\n  WHERE status != 'succeeded'\n    AND DATE(created_at) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n)\nSELECT\n  IFNULL(failure_reason, 'Unknown') AS failure_reason,\n  COUNT(*) AS count\nFROM deduped\nWHERE rn = 1\nGROUP BY failure_reason\nORDER BY count DESC\nLIMIT 5",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0009-0009-0009-b2c3d4e50009",
+      "name": "BQ: Get Top Failures",
+      "type": "n8n-nodes-base.googleBigQuery",
+      "typeVersion": 2,
+      "position": [1800, 500],
+      "credentials": {
+        "googleBigQueryOAuth2Api": {
+          "id": "REPLACE_WITH_BIGQUERY_CREDENTIAL_ID",
+          "name": "Google BigQuery"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('BQ: Get Daily Stats').first().json;\nconst failures = $('BQ: Get Top Failures').all();\n\nconst date = new Date();\ndate.setDate(date.getDate() - 1);\nconst dateStr = date.toISOString().split('T')[0];\n\nconst totalPayments = stats.total_payments ?? 0;\nconst failedPayments = stats.failed_payments ?? 0;\nconst failureRatePct = stats.failure_rate_pct ?? 0;\nconst revenueAtRisk = stats.revenue_at_risk ?? 0;\n\nlet failureRows = '';\nif (failures.length === 0) {\n  failureRows = '<tr><td colspan=\"2\" style=\"padding: 12px 16px; color: #6b7280; text-align: center;\">No failures recorded</td></tr>';\n} else {\n  for (const item of failures) {\n    const reason = item.json.failure_reason ?? 'Unknown';\n    const count = item.json.count ?? 0;\n    failureRows += `\n      <tr>\n        <td style=\"padding: 10px 16px; border-bottom: 1px solid #f3f4f6; color: #374151;\">${reason}</td>\n        <td style=\"padding: 10px 16px; border-bottom: 1px solid #f3f4f6; color: #ef4444; font-weight: 600; text-align: right;\">${count}</td>\n      </tr>`;\n  }\n}\n\nconst subject = `Stripe Daily Report — ${dateStr} | ${failedPayments} failures (${failureRatePct}%)`;\n\nconst html = `<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head>\n<body style=\"margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;\">\n  <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color: #f9fafb; padding: 32px 0;\">\n    <tr>\n      <td align=\"center\">\n        <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width: 600px; width: 100%;\">\n\n          <!-- Header -->\n          <tr>\n            <td style=\"background-color: #1a1a2e; border-radius: 12px 12px 0 0; padding: 28px 32px;\">\n              <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                <tr>\n                  <td>\n                    <p style=\"margin: 0; color: #9ca3af; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;\">Stripe Payment Monitor</p>\n                    <h1 style=\"margin: 4px 0 0; color: #ffffff; font-size: 22px; font-weight: 600;\">Daily Report — ${dateStr}</h1>\n                  </td>\n                </tr>\n              </table>\n            </td>\n          </tr>\n\n          <!-- KPI Row -->\n          <tr>\n            <td style=\"background-color: #ffffff; padding: 24px 32px;\">\n              <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                <tr>\n                  <td width=\"25%\" style=\"padding: 0 6px 0 0;\">\n                    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                      <tr><td style=\"background-color: #f8fafc; border-radius: 8px; padding: 16px 8px; text-align: center;\">\n                        <p style=\"margin: 0; color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;\">Total</p>\n                        <p style=\"margin: 4px 0 0; color: #111827; font-size: 26px; font-weight: 700;\">${totalPayments}</p>\n                      </td></tr>\n                    </table>\n                  </td>\n                  <td width=\"25%\" style=\"padding: 0 6px;\">\n                    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                      <tr><td style=\"background-color: #fef2f2; border-radius: 8px; padding: 16px 8px; text-align: center;\">\n                        <p style=\"margin: 0; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;\">Failed</p>\n                        <p style=\"margin: 4px 0 0; color: #dc2626; font-size: 26px; font-weight: 700;\">${failedPayments}</p>\n                      </td></tr>\n                    </table>\n                  </td>\n                  <td width=\"25%\" style=\"padding: 0 6px;\">\n                    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                      <tr><td style=\"background-color: #fffbeb; border-radius: 8px; padding: 16px 8px; text-align: center;\">\n                        <p style=\"margin: 0; color: #d97706; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;\">Failure Rate</p>\n                        <p style=\"margin: 4px 0 0; color: #b45309; font-size: 26px; font-weight: 700;\">${failureRatePct}%</p>\n                      </td></tr>\n                    </table>\n                  </td>\n                  <td width=\"25%\" style=\"padding: 0 0 0 6px;\">\n                    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n                      <tr><td style=\"background-color: #f0fdf4; border-radius: 8px; padding: 16px 8px; text-align: center;\">\n                        <p style=\"margin: 0; color: #16a34a; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;\">Revenue at Risk</p>\n                        <p style=\"margin: 4px 0 0; color: #15803d; font-size: 26px; font-weight: 700;\">$${revenueAtRisk}</p>\n                      </td></tr>\n                    </table>\n                  </td>\n                </tr>\n              </table>\n            </td>\n          </tr>\n\n          <!-- Top Failures Table -->\n          <tr>\n            <td style=\"background-color: #ffffff; padding: 0 32px 24px;\">\n              <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;\">\n                <tr>\n                  <td style=\"background-color: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e5e7eb;\">\n                    <p style=\"margin: 0; color: #374151; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;\">Failure Reason</p>\n                  </td>\n                  <td style=\"background-color: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: right;\">\n                    <p style=\"margin: 0; color: #374151; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;\">Count</p>\n                  </td>\n                </tr>\n                ${failureRows}\n              </table>\n            </td>\n          </tr>\n\n          <!-- CTA Button -->\n          <tr>\n            <td style=\"background-color: #ffffff; padding: 0 32px 32px; text-align: center;\">\n              <a href=\"https://lookerstudio.google.com\" style=\"display: inline-block; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 28px; border-radius: 6px;\">View Dashboard &rarr;</a>\n            </td>\n          </tr>\n\n          <!-- Footer -->\n          <tr>\n            <td style=\"background-color: #f3f4f6; border-radius: 0 0 12px 12px; padding: 16px 32px; text-align: center;\">\n              <p style=\"margin: 0; color: #9ca3af; font-size: 12px;\">Sent automatically by Stripe Payment Monitor &middot; n8n</p>\n            </td>\n          </tr>\n\n        </table>\n      </td>\n    </tr>\n  </table>\n</body>\n</html>`;\n\nreturn [{ json: { subject, html } }];"
+      },
+      "id": "b2c3d4e5-0010-0010-0010-b2c3d4e50010",
+      "name": "Code: Build Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 500]
+    },
+    {
+      "parameters": {
+        "sendTo": "marcgarciamassaneda@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0011-0011-0011-b2c3d4e50011",
+      "name": "Gmail: Send Daily Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [2240, 500],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily at 00:05": {
+      "main": [
+        [
+          {
+            "node": "Calculate Date Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Date Range": {
+      "main": [
+        [
+          {
+            "node": "Fetch Payments from Stripe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Payments from Stripe": {
+      "main": [
+        [
+          {
+            "node": "Unpack payments array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unpack payments array": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Payments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Payments": {
+      "main": [
+        [
+          {
+            "node": "Trigger Once",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Transform Payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Payment": {
+      "main": [
+        [
+          {
+            "node": "Insert into BigQuery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into BigQuery": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Payments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Once": {
+      "main": [
+        [
+          {
+            "node": "BQ: Get Daily Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BQ: Get Daily Stats": {
+      "main": [
+        [
+          {
+            "node": "BQ: Get Top Failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BQ: Get Top Failures": {
+      "main": [
+        [
+          {
+            "node": "Code: Build Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Email": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "stripe" },
+    { "name": "bigquery" },
+    { "name": "payments" }
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "id": "c1d2e3f4-a1b2-4c3d-a1b2-c1d2e3f4a1b2",
+  "versionId": "d1e2f3a4-b1c2-4d3e-b1c2-d1e2f3a4b1c2",
+  "name": "Stripe: Payment Failure Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stripe-failures",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-a1b2c3d40001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "stripe-failures"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-event-type",
+              "leftValue": "={{ $json.body.type }}",
+              "rightValue": "payment_intent.payment_failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0002-0002-0002-a1b2c3d40002",
+      "name": "Filter: failure events only",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.stripe.com/v1/customers/{{ $('Webhook').item.json.body.data.object.customer }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-0003-0003-a1b2c3d40003",
+      "name": "Fetch Customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_STRIPE_CREDENTIAL_ID",
+          "name": "Stripe API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-01",
+              "name": "customer_name",
+              "value": "={{ $('Fetch Customer').item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-02",
+              "name": "customer_email",
+              "value": "={{ $('Fetch Customer').item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-03",
+              "name": "amount",
+              "value": "={{ ($('Webhook').item.json.body.data.object.amount / 100).toFixed(2) }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-04",
+              "name": "currency",
+              "value": "={{ $('Webhook').item.json.body.data.object.currency.toUpperCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-05",
+              "name": "failure_reason",
+              "value": "={{ $('Webhook').item.json.body.data.object.last_payment_error?.message ?? 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-06",
+              "name": "failure_code",
+              "value": "={{ $('Webhook').item.json.body.data.object.last_payment_error?.code ?? 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-07",
+              "name": "payment_id",
+              "value": "={{ $('Webhook').item.json.body.data.object.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-a1b2c3d40004",
+      "name": "Build Alert Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [920, 200]
+    },
+    {
+      "parameters": {
+        "operation": "post",
+        "channel": {
+          "__rl": true,
+          "value": "#payments",
+          "mode": "name"
+        },
+        "text": "=:rotating_light: *Payment Failed*\n*Customer:* {{ $json.customer_name }} ({{ $json.customer_email }})\n*Amount:* {{ $json.amount }} {{ $json.currency }}\n*Reason:* {{ $json.failure_reason }}\n*Code:* {{ $json.failure_code }}\n*Payment ID:* {{ $json.payment_id }}",
+        "otherOptions": {}
+      },
+      "id": "a1b2c3d4-0005-0005-0005-a1b2c3d40005",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1140, 100],
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_SLACK_CREDENTIAL_ID",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "REPLACE_WITH_YOUR_EMAIL",
+        "subject": "=⚠️ Payment Failed — {{ $json.customer_name }}",
+        "message": "=<h2>Payment Failure Alert</h2>\n<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">\n  <tr><td><strong>Customer</strong></td><td>{{ $json.customer_name }}</td></tr>\n  <tr><td><strong>Email</strong></td><td>{{ $json.customer_email }}</td></tr>\n  <tr><td><strong>Amount</strong></td><td>{{ $json.amount }} {{ $json.currency }}</td></tr>\n  <tr><td><strong>Failure Reason</strong></td><td>{{ $json.failure_reason }}</td></tr>\n  <tr><td><strong>Failure Code</strong></td><td>{{ $json.failure_code }}</td></tr>\n  <tr><td><strong>Payment ID</strong></td><td>{{ $json.payment_id }}</td></tr>\n</table>",
+        "options": {
+          "isHtml": true
+        }
+      },
+      "id": "a1b2c3d4-0006-0006-0006-a1b2c3d40006",
+      "name": "Gmail Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1140, 320],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter: failure events only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: failure events only": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fetch Customer": {
+      "main": [
+        [
+          {
+            "node": "Build Alert Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Alert Data": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "stripe" },
+    { "name": "payments" }
+  ]
+}
