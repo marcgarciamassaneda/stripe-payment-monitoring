@@ -2,3 +2,4 @@
 .claude/
 *.env
 .env*
+scripts/create_test_failures.sh
